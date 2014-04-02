@@ -1,0 +1,71 @@
+#!/usr/bin/python
+'''
+Generate .ssh/config and /etc/hosts lines from EC2 instance information.
+'''
+# Imports
+import boto.ec2
+import boto
+import os
+import sys
+
+# Uncomment following line to enable DEBUG logs
+#boto.set_stream_logger('boto')
+
+def main():
+    '''
+    Main method.
+    '''
+    if len(sys.argv) < 2:
+        print ' Usage: '+str(sys.argv[0])+' [hosts|ssh]'
+        sys.exit(1)
+    # Default user
+    defaultUser = 'ec2-user'
+    # Default key path
+    userHome = os.getenv('USERPROFILE') or os.getenv('HOME')
+    defaultKeyPath = os.path.join(userHome, '.ssh')
+    # Connec to EC2; this assumes your boto config is in ~/.
+    ec2Connection = boto.connect_ec2()
+    #ec2Connection = boto.connect_to_region('ap-southeast-1')
+    # Get list of reservations.
+    reservationList = ec2Connection.get_all_instances()
+    # Initialize instance data tuple
+    instanceData = []
+    # Iterate over reservations
+    for reservation in reservationList:
+        # Iterate over instances
+        for instance in reservation.instances:
+            # Check for user tag
+            if 'user' in instance.tags:
+                user = instance.tags['user']
+            else:
+                user = defaultUser
+            # Check for name tag
+            if 'Name' in instance.tags:
+                name = instance.tags['Name']
+            else:
+                name = instance.id
+            public_ip = instance.ip_address
+            if not public_ip:
+                public_ip = 'not_found'
+            private_ip = instance.private_ip_address
+            if not private_ip:
+                private_ip = 'not_found'
+            instanceData.append((name, instance.public_dns_name, instance.key_name, defaultUser, public_ip, private_ip))
+    mode = str(sys.argv[1])
+    if mode == 'ssh':
+        # Generate .ssh/config output
+        for data in instanceData:
+            if data[1]:
+                print """Host {0}
+            HostName {1}
+            User {2}
+            IdentityFile {3}
+            """.format(data[0], data[1], data[3], os.path.join(defaultKeyPath, "{0}.pem".format(data[2])))
+    elif mode == "hosts":
+        # Generate hosts file
+        for data in instanceData:
+            if data[1]:
+                print "{2}\t{0}\t{1} ".format(data[0], data[1], data[4], data[5])
+
+if __name__ == "__main__":
+    main()

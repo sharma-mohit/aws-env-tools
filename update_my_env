@@ -1,0 +1,73 @@
+#!/bin/bash
+
+# define flags here
+ssh_cfg_status=false
+host_cfg_status=false
+
+# Define function to update env
+function update_env() {
+        echo "Updating..."
+        # updating ssh config
+        python list_aws_details_for ssh > /tmp/ssh_config_aws
+        if [ $? != 0 ]; then
+            echo
+            echo "Error while fetching data from aws. See above exception."
+            return 1
+        fi
+
+        cat ~/ssh_config_non_aws /tmp/ssh_config_aws > ~/.ssh/config
+        if [ $? == 0 ]; then
+            echo "ssh config updated"
+            ssh_cfg_status=true
+        fi
+
+        # updating /etc/hosts
+        python list_aws_details_for hosts > /tmp/hosts_aws
+        if [ $? != 0 ]; then
+            echo
+            echo "Error while fetching data from aws. See above exception."
+            return 1
+        fi
+        cat ~/hosts_non_aws /tmp/hosts_aws  > /etc/hosts
+        if [ $? == 0 ]; then
+            echo "/etc/hosts updated"
+            host_cfg_status=true
+        fi
+        echo "Boooom ! \m/"
+}
+
+read -p "This will over-write your ssh_config and /etc/hosts. Are you Sure? (y/n):  " -n 1 -r
+echo 
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+    echo "Not updated anything. Exiting.."
+    exit 1
+fi
+
+echo ""
+# User consent taken. Continuing
+if [ ! -f ~/ssh_config_non_aws ] || [ ! -f ~/hosts_non_aws ]; then
+    read -p "Your non-aws env files (~/ssh_config_non_aws and ~/hosts_non_aws) does not exist. Want to continue? (y/n): " -n 1 -r
+    echo 
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        echo "Not updated anything. Exiting..."
+        exit 1;
+    else
+        update_env
+    fi
+else
+    update_env
+fi
+
+# Print Status
+if ! $ssh_cfg_status || ! $host_cfg_status ; then
+    echo "Something queer happened. debug! "
+    exit 1
+else
+    echo "Looks like everthing went fine."
+    exit 0
+fi
+
+# In the end 
+echo
+exit
